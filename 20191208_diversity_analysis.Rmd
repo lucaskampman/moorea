@@ -1,0 +1,165 @@
+---
+title: "20191208_diversity_analysis"
+author: "Lucas Kampman"
+date: "11/14/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Set WD:
+
+```{r cars}
+setwd("/Users/lucaskampman/Box Sync/moorea_docs/")
+```
+
+
+
+Beginning by reading in the data as plot_data:
+
+```{r pressure}
+plot_data<- read.csv("kampman_plot_data.csv")
+
+summary(plot_data)
+
+# Filter out data that's only in the barrier:
+
+library(dplyr)
+barrier_data <- filter(plot_data, plot_desc == "north_barrier")
+
+summary(barrier_data)
+
+# Import vegan for NMDS stuff
+
+library(vegan)
+
+# Include only certain columns for pairwise comparison:
+
+plot_data_skinny <- plot_data[c("plot_depth_mean","L_count","P_count","A_count",
+                                  "plot_lat_decimal","plot_long_decimal","general_substrate",
+                                "dist_to_channel_m","perc_coral_heads",
+                                  "padina_present", "sarg_present","turb_present","hal_present","turbidity","should_use","L_bool","P_bool","A_bool", "beta_w")]
+
+
+library(ggmap)
+library(tmaptools)
+library(viridis)
+library(lubridate)
+library(ggplot2)
+
+site_location <- c(-149.845, -17.505, -149.81,-17.475)
+moorea_map <- ggmap(get_stamenmap(rbind(as.numeric(paste(geocode_OSM("Moorea")$bbox))), zoom = 12)) +
+  #geom_point(data =cca_lat_long,aes(y=plot_lat_decimal,x=plot_long_decimal, color=CCA1),alpha=0.5,size=1) + 
+  #scale_color_viridis(option="magma") + 
+  annotate('rect', xmin=-149.845, ymin=-17.5075, xmax=-149.81, ymax=-17.475, col="black", fill="transparent") +
+  theme(axis.text=element_text(size=12),axis.title=element_text(size=15)) + xlab("Longitude") + ylab("Latitude")
+
+ggsave("moorea_map.pdf", moorea_map)
+
+sites_depth_map <- ggmap(get_stamenmap(site_location,  zoom=14)) +
+  geom_point(data =plot_data_skinny,aes(y=plot_lat_decimal,x=plot_long_decimal, color=plot_depth_mean), alpha=0.5,size=2.5) + 
+  scale_color_viridis(option="magma",name = "Depth (cm)") +
+  theme(axis.text=element_text(size=12),axis.title=element_text(size=15)) + xlab("Longitude") + ylab("Latitude") +
+  theme(legend.title = element_text( size=12), legend.text = element_text(size =11)) 
+
+ggsave("sites_depth_map.pdf", sites_depth_map)
+
+
+library(gtable)
+library(ggplot2)
+library(grid)
+library(egg)
+
+map_fig <- ggarrange(moorea_map, sites_depth_map, nrow = 2)
+ggsave("maps.pdf", width = 6, height = 8, map_fig)
+
+
+
+
+# Exclude rows with NA's
+
+plot_data_skinny <- na.omit(plot_data_skinny)
+
+# look at it
+pairs(plot_data_skinny,lower.panel = NULL,cex=.1)
+
+
+# split into environmental and community data
+
+environmental_data <- plot_data_skinny[c("plot_depth_mean","dist_to_channel_m","perc_coral_heads","general_substrate","turbidity")]
+community_data <- plot_data_skinny[c("L_count","P_count","A_count","padina_present", "sarg_present","turb_present","hal_present")]
+
+# Rename columns so they're not as bad
+
+library(tidyverse)
+environmental_data <- environmental_data %>% rename(
+  "depth" = plot_depth_mean,
+  "distance to channel" = dist_to_channel_m,
+  "coral cover" = perc_coral_heads,
+  "substrate: " = general_substrate
+)
+
+community_data <- community_data %>% rename(
+  "Lyngbya" = L_count,
+  "Plurispecific" = P_count,
+  "Anabaena" = A_count,
+  "Padina" = padina_present,
+  "Sargassum" = sarg_present,
+  "Turbinaria" = turb_present,
+  "Halimeda" = hal_present
+  )
+
+community_data_binary <- plot_data_skinny[c("L_bool","P_bool","A_bool","padina_present", "sarg_present","turb_present","hal_present")]
+
+community_data_binary <- community_data_binary %>% rename(
+  "Lyngbya" = L_bool,
+  "Plurispecific" = P_bool,
+  "Anabaena" = A_bool,
+  "Padina" = padina_present,
+  "Sargassum" = sarg_present,
+  "Turbinaria" = turb_present,
+  "Halimeda" = hal_present
+  )
+
+
+## Running an alpha Shannon-Wiener Index (H') test on all the sites + mapping it
+
+library(vegan)
+shannon <- diversity(community_data[ -1], index = "shannon")
+plot_data_skinny$shannon <- shannon
+
+jaccard <- vegdist(community_data_binary, method="jaccard", na.rm = TRUE)
+jaccard
+
+library(viridis)
+library(ggmap)
+library(tmaptools)
+
+site_location <- c(-149.845, -17.505, -149.81,-17.475)
+shannon_map <- ggmap(get_stamenmap(site_location,  zoom=14)) +
+  geom_point(data =plot_data_skinny,aes(y=plot_lat_decimal,x=plot_long_decimal, color=shannon),alpha=0.5,size=2.5) + 
+  scale_color_viridis(option="magma") +
+  theme(axis.text=element_text(size=12),axis.title=element_text(size=15)) + xlab("Longitude") + ylab("Latitude") +
+  theme(legend.title = element_text(size=12), legend.text = element_text(size =11))
+
+ggsave("shannon_map.pdf", shannon_map)
+
+beta_map <- ggmap(get_stamenmap(site_location,  zoom=14)) +
+  geom_point(data =plot_data_skinny,aes(y=plot_lat_decimal,x=plot_long_decimal, color=beta_w),alpha=0.5,size=2.5) + 
+  scale_color_viridis(option="magma") +
+  theme(axis.text=element_text(size=12),axis.title=element_text(size=15)) + xlab("Longitude") + ylab("Latitude") +
+  theme(legend.title = element_text(size=12), legend.text = element_text(size =11))
+
+ggsave("beta_map.pdf", beta_map)
+
+diversity_fig <- ggarrange(shannon_map, beta_map, nrow = 2)
+ggsave("diversity_maps.pdf", width = 6, height = 8, diversity_fig)
+
+## Running species richness on all the sites + mapping it
+
+library(dplyr)
+
+
+```

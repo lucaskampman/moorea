@@ -1,0 +1,138 @@
+---
+title: "20191122_growth_rates"
+author: "Lucas Kampman"
+date: "11/22/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+
+library(tidyverse)
+library(ggplot2)
+library(ggthemes)
+setwd("/Users/lucaskampman/Box Sync/moorea_docs/")
+
+# Read in data file (expanded to include in-situ data)
+growth_data <-  read.csv("kampman_growth_data_full.csv")
+
+# omit lines with NA's
+growth_data <- na.omit(growth_data)
+head(growth_data)
+
+# growth_data$date <- as.Date(growth_data$date, format = "%m/%d/%y")
+
+# Uncomment to check that data is looking good
+# View(growth_data)
+
+library(dplyr)
+
+
+
+# filter to just the plurispecific mat data
+
+pluri_data <- filter(growth_data, species=="p")
+
+# Reorder treatment factors so that it looks pretty in the 
+pluri_data$treatment <- factor(pluri_data$treatment, levels = c("stream_outlet", "fringe_corner", "north_fringe", "p_in-situ"))
+
+# Rename data frame because I was lazy
+p_growth_data <- pluri_data
+
+# Look at it
+summary(p_growth_data)
+
+# Gather all the in-situ data into one data frame
+# View(growth_data)
+l_situ_data <- filter(growth_data, treatment == "l_in-situ")
+p_situ_data <- filter(growth_data, treatment == "p_in-situ")
+
+
+# plot all the in-situ stuff (Fig. A3)
+situ_data <- rbind(l_situ_data, p_situ_data)
+summary(situ_data)
+
+situ_growth <- situ_data %>%
+  group_by(treatment, days_elapsed) %>%
+  summarise(mean_diameter = mean(diameter),
+            sd_diameter = sd(diameter))
+
+situ_plot <- ggplot(data = situ_growth, aes(x = days_elapsed, y = mean_diameter, color = treatment)) + 
+  geom_line(size = 1)  + theme_hc() + 
+  geom_errorbar(aes(ymin=mean_diameter-sd_diameter, ymax=mean_diameter+sd_diameter), size = 1, width = 1, position=position_dodge(.9)) +
+  theme(plot.title = element_text(size = 24), axis.text=element_text(size=14), axis.title.x = element_text(size = 20), axis.title.y = element_text(size = 20), legend.text=element_text(size=13), legend.title=element_blank()) + 
+  xlab("Days elapsed") + ylab("Length (cm)") + 
+  scale_color_hc(labels = c("Lyngbya", "Plurispecific")) +
+  scale_x_continuous(breaks=c(0, 2, 5, 7, 9, 12)) +
+  scale_y_continuous(limits=c(0,16), breaks=seq(0,16,4))
+
+situ_plot
+ggsave("growth_in-situ.pdf", height = 6, width = 7)
+
+
+
+# Gather all plurispecific mat data together to summarize and compare treatments
+
+summary_growth <- pluri_data %>%
+  group_by(treatment, days_elapsed) %>%
+  summarise(mean_diameter = mean(diameter),
+            sd_diameter = sd(diameter))
+
+summary(summary_growth)
+
+summary_plot <- ggplot(data = summary_growth, aes(x = days_elapsed, y = mean_diameter, color = treatment)) + 
+  geom_line(size = 1)  + theme_hc() +  
+  geom_errorbar(aes(ymin=mean_diameter-sd_diameter, ymax=mean_diameter+sd_diameter), size = 1, width = 1, position=position_dodge(.9)) +
+  theme(plot.title = element_text(size = 24), axis.text=element_text(size=16), axis.title.x = element_text(size = 20), axis.title.y = element_text(size = 20), legend.text=element_text(size=13), legend.title=element_blank()) + 
+  xlab("Days elapsed") + ylab("Length (cm)")  + 
+  scale_color_hc(labels = c("stream outlet", "fringe corner", "north fringe", "in-situ Plurispecific")) +
+  scale_x_continuous(breaks=c(0, 2, 5, 7, 9, 12))+
+  scale_y_continuous(limits=c(0,16), breaks=seq(0,16,4)) #+guides(fill=guide_legend(nrow=2))
+
+
+summary_plot
+ggsave("growth_summary.pdf", height = 6, width = 7)
+
+
+# View(p_growth_data)
+
+# stats
+
+library(lmerTest)
+   
+   # Full linear model (gets converted from an REML as it runs to an ML, not sure why)
+growth_fit_full <- lmer(diameter ~ days_elapsed + treatment + days_elapsed:treatment + (1|mat_index), data = p_growth_data)
+
+# Look at the results
+summary(growth_fit_full)
+
+growth_fit_reduced_treatment <- lmer(diameter ~ days_elapsed + days_elapsed:treatment + (1|mat_index), data = p_growth_data, )
+growth_fit_reduced_time <- lmer(diameter ~ treatment + days_elapsed:treatment + (1|mat_index), data = p_growth_data, )
+growth_fit_reduced_interaction <- lmer(diameter ~ days_elapsed + treatment + (1|mat_index), data = p_growth_data, )
+
+
+# Running ANOVAs to look at effects of reductions
+anova(growth_fit_reduced_treatment, growth_fit_full)
+anova(growth_fit_reduced_time, growth_fit_full)
+anova(growth_fit_reduced_interaction, growth_fit_full)
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
